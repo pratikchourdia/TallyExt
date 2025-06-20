@@ -1,43 +1,42 @@
+
 export interface Company {
-  id: string;
+  id: string; // In Tally, this might be the company name or a file path/GUID
   name: string;
-  // Add other relevant company details if needed from Tally
-  // e.g., financial year, address, etc.
 }
 
 export interface Customer {
-  id: string;
+  id: string; // For app reference, in Tally often the Ledger Name
   name: string;
   contactPerson?: string;
   phoneNumber?: string;
   email?: string;
   addressLine1: string;
   addressLine2?: string;
-  city: string;
-  state: string;
+  city: string; // May need to be parsed from Address or be a UDF in Tally
+  state: string; // May need to be parsed or use PlaceOfSupply
   pincode: string;
   gstin?: string;
-  ledgerName: string; 
-  group: 'Sundry Debtors';
-  creditAccount: string; 
-  companyId?: string; // To associate customer with a Tally company
+  ledgerName: string; // Actual Tally Ledger Name
+  group: 'Sundry Debtors'; // Tally group
+  creditAccount: string; // This is an app-level concept, maps to a Sales Ledger in Tally
+  companyId?: string; // Name of the Tally company this customer belongs to
 }
 
 export interface InvoiceItem {
-  id: string;
-  itemName: string;
+  id: string; // App-level ID
+  itemName: string; // Tally Stock Item Name
   hsnSac?: string;
   quantity: number;
   rate: number;
-  unit: string; // e.g. PCS, KGS, NOS
+  unit: string; // e.g. PCS, KGS, NOS - Must match Tally unit symbols
   amount: number;
 }
 
 export interface Invoice {
-  id: string;
-  invoiceNumber: string;
-  invoiceDate: string;
-  dueDate?: string;
+  id: string; // App-level ID
+  invoiceNumber: string; // Actual Tally Voucher Number
+  invoiceDate: string; // YYYY-MM-DD
+  dueDate?: string; // YYYY-MM-DD
   customer: Customer;
   items: InvoiceItem[];
   subTotal: number;
@@ -49,15 +48,18 @@ export interface Invoice {
   igstAmount?: number;
   totalAmount: number;
   amountInWords: string;
-  voucherType: 'Sales';
-  companyId?: string; // To associate invoice with a Tally company
+  voucherType: 'Sales'; // Tally Voucher Type
+  companyId?: string; // Name of the Tally company this invoice belongs to
 }
 
+// These MOCK_CREDIT_ACCOUNTS should be updated by the user
+// to reflect actual Sales Ledger names in their Tally company.
 export const MOCK_CREDIT_ACCOUNTS = [
-  { value: 'sales_domestic', label: 'Sales - Domestic' },
-  { value: 'sales_export', label: 'Sales - Export' },
-  { value: 'service_income', label: 'Service Income' },
-  { value: 'other_income_indirect', label: 'Other Indirect Income' },
+  { value: 'Sales', label: 'Sales Account' },
+  { value: 'Sales - Domestic', label: 'Sales - Domestic' },
+  { value: 'Sales - Export', label: 'Sales - Export' },
+  { value: 'Service Income', label: 'Service Income' },
+  // Add more or modify these to match your Tally ledger names
 ];
 
 export const MOCK_STATES = [
@@ -99,6 +101,7 @@ export const MOCK_STATES = [
   { value: 'WB', label: 'West Bengal' }
 ];
 
+// These MOCK_UNITS should also ideally match unit symbols defined in Tally.
 export const MOCK_UNITS = [
   { value: 'NOS', label: 'Numbers (NOS)' },
   { value: 'PCS', label: 'Pieces (PCS)' },
@@ -107,34 +110,35 @@ export const MOCK_UNITS = [
   { value: 'MTR', label: 'Meters (MTR)' },
   { value: 'BOX', label: 'Box (BOX)' },
   { value: 'SET', label: 'Sets (SET)' },
+  // Add more units as per your Tally setup
 ];
 
-export const MOCK_COMPANIES: Company[] = [
-  { id: 'comp_001', name: 'My Main Company (FY 2023-24)' },
-  { id: 'comp_002', name: 'Branch Office Alpha (FY 2023-24)' },
-  { id: 'comp_003', name: 'Test Company Inc.' },
-];
-
+// MOCK_COMPANIES is removed as companies are now fetched from Tally.
 
 // Basic number to words converter (Simplified for brevity)
 export function numberToWords(num: number): string {
-  // This is a very simplified version. 
-  // For a production app, use a robust library.
   const a = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
   const b = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
   
   const inWords = (n: number): string => {
+    if (n < 0) return "minus " + inWords(Math.abs(n));
     if (n < 20) return a[n];
     let digit = n % 10;
     if (n < 100) return b[Math.floor(n / 10)] + (digit ? '-' + a[digit] : '');
     if (n < 1000) return a[Math.floor(n / 100)] + ' hundred' + (n % 100 === 0 ? '' : ' and ' + inWords(n % 100));
     if (n < 100000) return inWords(Math.floor(n/1000)) + ' thousand' + (n % 1000 === 0 ? '' : ' ' + inWords(n % 1000));
-    // Add more for lakhs, crores if needed
-    return 'Number too large to convert';
+    if (n < 10000000) return inWords(Math.floor(n/100000)) + ' lakh' + (n % 100000 === 0 ? '' : ' ' + inWords(n % 100000));
+    // Add more for crores if needed
+    return 'Number too large to convert for this simple function';
   }
 
-  if (num === 0) return 'zero';
+  if (num === 0) return 'Zero';
   const result = inWords(Math.floor(num));
-  const decimalPart = Math.round((num % 1) * 100);
-  return result.toUpperCase() + (decimalPart > 0 ? ' AND ' + inWords(decimalPart).toUpperCase() + ' PAISE' : '') + ' ONLY';
+  const decimalPart = Math.round((num % 1) * 100); // Convert paisa to integer
+  
+  let words = result.charAt(0).toUpperCase() + result.slice(1);
+  if (decimalPart > 0) {
+    words += ' and ' + inWords(decimalPart) + ' Paise';
+  }
+  return words + ' Only';
 }

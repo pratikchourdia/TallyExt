@@ -1,3 +1,4 @@
+
 "use client";
 
 import React from 'react';
@@ -5,28 +6,43 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
-import type { Invoice } from '@/types';
-import { Printer, FilePlus2 } from 'lucide-react';
+import type { Invoice, Customer, Company } from '@/types'; // Added Customer, Company
+import { Printer, FilePlus2, Users } from 'lucide-react'; // Users for Start Over
 import { format } from 'date-fns';
 
 interface InvoiceDisplayProps {
   invoice: Invoice;
-  onCreateNew: () => void;
+  customer: Customer; // Pass customer for display
+  company: Company; // Pass company for context
+  onCreateNewForSameCustomer: () => void; // New prop
+  onStartOver: () => void; // New prop
 }
 
-export function InvoiceDisplay({ invoice, onCreateNew }: InvoiceDisplayProps) {
+export function InvoiceDisplay({ 
+  invoice, 
+  customer, 
+  company, 
+  onCreateNewForSameCustomer, 
+  onStartOver 
+}: InvoiceDisplayProps) {
   
   const handlePrint = () => {
     window.print();
   };
 
   return (
-    <Card className="w-full max-w-4xl mx-auto shadow-lg">
-      <CardHeader className="bg-muted/50 p-4 rounded-t-lg">
+    <Card className="w-full max-w-4xl mx-auto shadow-lg print:shadow-none">
+      <CardHeader className="bg-muted/50 p-4 rounded-t-lg print:bg-transparent">
         <div className="flex justify-between items-center">
           <div>
             <CardTitle className="text-2xl font-headline">Invoice</CardTitle>
-            <CardDescription>Invoice No: <span className="font-semibold">{invoice.invoiceNumber}</span></CardDescription>
+            <CardDescription>
+              Invoice No: <span className="font-semibold">{invoice.invoiceNumber}</span>
+              <br className="print:hidden"/>
+              <span className="text-xs text-muted-foreground print:hidden">
+                For Company: {company.name}
+              </span>
+            </CardDescription>
           </div>
           <div className="text-right">
             <p>Date: {format(new Date(invoice.invoiceDate), "dd MMM, yyyy")}</p>
@@ -39,19 +55,20 @@ export function InvoiceDisplay({ invoice, onCreateNew }: InvoiceDisplayProps) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <h3 className="font-semibold text-primary mb-1">From:</h3>
-            <p className="font-bold">TallyPrime Auto Invoicer (Your Company)</p>
-            <p>123 Business Street, Metropolis, ST 54321</p>
-            <p>GSTIN: YOUR_GSTIN_HERE</p>
+            <p className="font-bold">{company.name}</p>
+            {/* Add more company details if available and needed */}
+            <p>Local Tally Instance</p> 
+            {/* <p>GSTIN: YOUR_COMPANY_GSTIN_HERE</p> */}
           </div>
           <div>
             <h3 className="font-semibold text-primary mb-1">To (Billed To):</h3>
-            <p className="font-bold">{invoice.customer.name}</p>
-            <p>{invoice.customer.addressLine1}</p>
-            {invoice.customer.addressLine2 && <p>{invoice.customer.addressLine2}</p>}
-            <p>{invoice.customer.city}, {invoice.customer.state} - {invoice.customer.pincode}</p>
-            {invoice.customer.gstin && <p>GSTIN: {invoice.customer.gstin}</p>}
-            {invoice.customer.email && <p>Email: {invoice.customer.email}</p>}
-            {invoice.customer.phoneNumber && <p>Phone: {invoice.customer.phoneNumber}</p>}
+            <p className="font-bold">{customer.name}</p>
+            <p>{customer.addressLine1}</p>
+            {customer.addressLine2 && <p>{customer.addressLine2}</p>}
+            <p>{customer.city}{customer.city && customer.state && ", "}{customer.state}{customer.pincode && ` - ${customer.pincode}`}</p>
+            {customer.gstin && <p>GSTIN: {customer.gstin}</p>}
+            {customer.email && <p>Email: {customer.email}</p>}
+            {customer.phoneNumber && <p>Phone: {customer.phoneNumber}</p>}
           </div>
         </div>
 
@@ -130,10 +147,10 @@ export function InvoiceDisplay({ invoice, onCreateNew }: InvoiceDisplayProps) {
           <p className="text-sm"><span className="font-semibold">Amount in Words:</span> {invoice.amountInWords}</p>
         </div>
 
-        <Separator />
+        <Separator className="print:hidden" />
         
         {/* Terms and Conditions / Notes */}
-        <div>
+        <div className="print:hidden">
           <h4 className="font-semibold mb-1">Terms & Conditions:</h4>
           <ul className="list-disc list-inside text-xs text-muted-foreground">
             <li>Payment due within 30 days.</li>
@@ -143,14 +160,20 @@ export function InvoiceDisplay({ invoice, onCreateNew }: InvoiceDisplayProps) {
         </div>
 
       </CardContent>
-      <CardFooter className="p-4 border-t flex justify-between items-center">
-        <Button variant="outline" onClick={onCreateNew}>
-          <FilePlus2 className="mr-2 h-4 w-4" /> Create New Invoice
+      <CardFooter className="p-4 border-t flex flex-col sm:flex-row justify-between items-center space-y-2 sm:space-y-0 print:hidden">
+        <Button variant="outline" onClick={onStartOver}>
+          <Users className="mr-2 h-4 w-4" /> Start Over (New Customer/Company)
         </Button>
-        <Button onClick={handlePrint}>
-          <Printer className="mr-2 h-4 w-4" /> Print Invoice
-        </Button>
+        <div className="flex space-x-2">
+          <Button variant="outline" onClick={onCreateNewForSameCustomer}>
+            <FilePlus2 className="mr-2 h-4 w-4" /> New Invoice (Same Customer)
+          </Button>
+          <Button onClick={handlePrint}>
+            <Printer className="mr-2 h-4 w-4" /> Print Invoice
+          </Button>
+        </div>
       </CardFooter>
     </Card>
   );
 }
+

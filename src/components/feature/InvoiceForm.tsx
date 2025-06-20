@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -13,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
-import { Customer, Invoice, InvoiceItem, MOCK_UNITS } from '@/types';
+import { Customer, Invoice, InvoiceItem, MOCK_UNITS, Company } from '@/types';
 import { generateNewInvoice as apiGenerateNewInvoice } from '@/lib/tally-api';
 import { Loader2, PlusCircle, Trash2, FileText, ArrowLeft, CalendarIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -45,9 +46,10 @@ interface InvoiceFormProps {
   customer: Customer;
   onSubmitSuccess: (invoice: Invoice) => void;
   onCancel: () => void;
+  selectedCompany: Company; // Added selectedCompany prop
 }
 
-export function InvoiceForm({ customer, onSubmitSuccess, onCancel }: InvoiceFormProps) {
+export function InvoiceForm({ customer, onSubmitSuccess, onCancel, selectedCompany }: InvoiceFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
@@ -76,6 +78,15 @@ export function InvoiceForm({ customer, onSubmitSuccess, onCancel }: InvoiceForm
 
   const processSubmit = async (data: InvoiceFormData) => {
     setIsLoading(true);
+    if (!selectedCompany) {
+      toast({
+        title: "Error",
+        description: "No company selected. Cannot generate invoice.",
+        variant: "destructive",
+      });
+      setIsLoading(false);
+      return;
+    }
     try {
       const invoiceData = {
         invoiceDate: format(data.invoiceDate, "yyyy-MM-dd"),
@@ -88,10 +99,11 @@ export function InvoiceForm({ customer, onSubmitSuccess, onCancel }: InvoiceForm
           rate: item.rate,
         })),
       };
-      const generatedInvoice = await apiGenerateNewInvoice(invoiceData, customer);
+      // Pass selectedCompany.id to the API call
+      const generatedInvoice = await apiGenerateNewInvoice(invoiceData, customer, selectedCompany.id);
       toast({
         title: "Invoice Generated",
-        description: `Invoice ${generatedInvoice.invoiceNumber} created for ${customer.name}.`,
+        description: `Invoice ${generatedInvoice.invoiceNumber} created for ${customer.name} in ${selectedCompany.name}.`,
       });
       onSubmitSuccess(generatedInvoice);
     } catch (error) {
@@ -112,6 +124,8 @@ export function InvoiceForm({ customer, onSubmitSuccess, onCancel }: InvoiceForm
         <CardTitle className="text-2xl font-headline text-center">Create New Invoice</CardTitle>
         <CardDescription className="text-center">
           For customer: <span className="font-semibold">{customer.name}</span> ({customer.gstin || 'GSTIN Not Available'})
+          <br/>
+          In company: <span className="font-semibold">{selectedCompany.name}</span>
         </CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit(processSubmit)}>
@@ -287,7 +301,7 @@ export function InvoiceForm({ customer, onSubmitSuccess, onCancel }: InvoiceForm
           <Button type="button" variant="outline" onClick={onCancel} disabled={isLoading}>
             <ArrowLeft className="mr-2 h-4 w-4" /> Cancel
           </Button>
-          <Button type="submit" disabled={isLoading}>
+          <Button type="submit" disabled={isLoading || !selectedCompany}>
             {isLoading ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <FileText className="mr-2 h-4 w-4" />}
             Generate Invoice
           </Button>

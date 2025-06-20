@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState } from 'react';
@@ -9,9 +10,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { MOCK_CREDIT_ACCOUNTS, MOCK_STATES, type Customer } from '@/types';
+import { MOCK_CREDIT_ACCOUNTS, MOCK_STATES, type Customer, type Company } from '@/types';
 import { Loader2, ArrowLeft, UserPlus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+
+// Mock function, replace with actual API call
+import { createNewCustomer as apiCreateNewCustomer } from '@/lib/tally-api';
 
 const customerSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -33,12 +37,11 @@ interface CustomerFormProps {
   initialSearchTerm?: string;
   onSubmitSuccess: (customer: Customer) => void;
   onCancel: () => void;
+  selectedCompany: Company; // Added selectedCompany prop
 }
 
-// Mock function, replace with actual API call
-import { createNewCustomer as apiCreateNewCustomer } from '@/lib/tally-api';
 
-export function CustomerForm({ initialSearchTerm = '', onSubmitSuccess, onCancel }: CustomerFormProps) {
+export function CustomerForm({ initialSearchTerm = '', onSubmitSuccess, onCancel, selectedCompany }: CustomerFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
@@ -63,6 +66,15 @@ export function CustomerForm({ initialSearchTerm = '', onSubmitSuccess, onCancel
 
   const processSubmit = async (data: CustomerFormData) => {
     setIsLoading(true);
+    if (!selectedCompany) {
+      toast({
+        title: "Error",
+        description: "No company selected. Cannot create customer.",
+        variant: "destructive",
+      });
+      setIsLoading(false);
+      return;
+    }
     try {
       const newCustomerData = {
         name: data.name,
@@ -77,11 +89,11 @@ export function CustomerForm({ initialSearchTerm = '', onSubmitSuccess, onCancel
         gstin: data.gstin,
         creditAccount: data.creditAccount,
       };
-      // Explicitly typecast data to satisfy Omit<Customer, 'id' | 'ledgerName' | 'group'>
-      const createdCustomer = await apiCreateNewCustomer(newCustomerData as Omit<Customer, 'id' | 'ledgerName' | 'group'> & {name: string});
+      // Pass selectedCompany.id to the API call
+      const createdCustomer = await apiCreateNewCustomer(newCustomerData as Omit<Customer, 'id' | 'ledgerName' | 'group' | 'companyId'> & {name: string}, selectedCompany.id);
       toast({
         title: "Customer Created",
-        description: `${createdCustomer.name} has been successfully created.`,
+        description: `${createdCustomer.name} has been successfully created for ${selectedCompany.name}.`,
       });
       onSubmitSuccess(createdCustomer);
     } catch (error) {
@@ -101,6 +113,7 @@ export function CustomerForm({ initialSearchTerm = '', onSubmitSuccess, onCancel
       <CardHeader>
         <CardTitle className="text-2xl font-headline text-center">Create New Customer</CardTitle>
         <CardDescription className="text-center">
+          For company: <span className="font-semibold">{selectedCompany.name}</span>.
           Fill in the details for the new customer. Fields marked with * are required.
         </CardDescription>
       </CardHeader>
@@ -241,7 +254,7 @@ export function CustomerForm({ initialSearchTerm = '', onSubmitSuccess, onCancel
           <Button type="button" variant="outline" onClick={onCancel} disabled={isLoading}>
             <ArrowLeft className="mr-2 h-4 w-4" /> Cancel
           </Button>
-          <Button type="submit" disabled={isLoading}>
+          <Button type="submit" disabled={isLoading || !selectedCompany}>
             {isLoading ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <UserPlus className="mr-2 h-4 w-4" />}
             Create Customer
           </Button>

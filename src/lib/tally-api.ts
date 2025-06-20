@@ -1,5 +1,9 @@
-import type { Customer, Invoice, InvoiceItem } from '@/types';
-import { numberToWords } from '@/types';
+import type { Customer, Invoice, InvoiceItem, Company } from '@/types';
+import { numberToWords, MOCK_COMPANIES } from '@/types';
+
+// Placeholder for your Tally API endpoint configuration
+// In a real scenario, this would be configurable, possibly via environment variables.
+const TALLY_API_BASE_URL = 'http://localhost:9000'; // Default Tally port is 9000
 
 let MOCK_CUSTOMERS_DB: Customer[] = [
   { 
@@ -14,7 +18,8 @@ let MOCK_CUSTOMERS_DB: Customer[] = [
     state: 'MH',
     pincode: '400001',
     email: 'contact@acmecorp.com',
-    phoneNumber: '9876543210'
+    phoneNumber: '9876543210',
+    companyId: MOCK_COMPANIES[0].id, // Associated with the first mock company
   },
   { 
     id: 'cust_002', 
@@ -28,7 +33,8 @@ let MOCK_CUSTOMERS_DB: Customer[] = [
     state: 'KA',
     pincode: '560001',
     email: 'info@betasolutions.com',
-    phoneNumber: '9123456789'
+    phoneNumber: '9123456789',
+    companyId: MOCK_COMPANIES[0].id, // Associated with the first mock company
   },
 ];
 
@@ -38,22 +44,49 @@ let invoiceIdCounter = 1;
 
 const simulateDelay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-export async function findCustomerByName(name: string): Promise<Customer | null> {
+// --- Real Tally API calls would go below, replacing mock functions ---
+// Example:
+// async function sendTallyRequest(xmlPayload: string): Promise<string> {
+//   const response = await fetch(TALLY_API_BASE_URL, {
+//     method: 'POST',
+//     headers: { 'Content-Type': 'application/xml' },
+//     body: xmlPayload,
+//   });
+//   if (!response.ok) throw new Error(`Tally API request failed: ${response.statusText}`);
+//   return response.text(); // XML response from Tally
+// }
+// --- End of example ---
+
+
+export async function getTallyCompanies(): Promise<Company[]> {
+  await simulateDelay(300);
+  // In a real scenario, this would fetch companies from Tally.
+  // For example, by sending an XML request to TALLY_API_BASE_URL.
+  console.log(`Mock API: Fetching companies. Real endpoint would be ${TALLY_API_BASE_URL}`);
+  return MOCK_COMPANIES;
+}
+
+export async function findCustomerByName(name: string, companyId: string): Promise<Customer | null> {
   await simulateDelay(500);
+  console.log(`Mock API: Searching for customer "${name}" in company "${companyId}". Real endpoint would be ${TALLY_API_BASE_URL}`);
   const searchTerm = name.toLowerCase();
-  const found = MOCK_CUSTOMERS_DB.find(c => c.name.toLowerCase().includes(searchTerm));
+  // In a real scenario, filter by companyId as well if your Tally structure requires it
+  const found = MOCK_CUSTOMERS_DB.find(c => c.companyId === companyId && c.name.toLowerCase().includes(searchTerm));
   return found || null;
 }
 
 export async function createNewCustomer(
-  data: Omit<Customer, 'id' | 'ledgerName' | 'group'> & { name: string }
+  data: Omit<Customer, 'id' | 'ledgerName' | 'group'> & { name: string },
+  companyId: string
 ): Promise<Customer> {
   await simulateDelay(1000);
+  console.log(`Mock API: Creating customer "${data.name}" in company "${companyId}". Real endpoint would be ${TALLY_API_BASE_URL}`);
   const newCustomer: Customer = {
     ...data,
     id: `cust_${String(customerIdCounter++).padStart(3, '0')}`,
-    ledgerName: data.name, // In Tally, Ledger Name is often same as Customer Name
+    ledgerName: data.name, 
     group: 'Sundry Debtors',
+    companyId: companyId,
   };
   MOCK_CUSTOMERS_DB.push(newCustomer);
   return newCustomer;
@@ -61,9 +94,11 @@ export async function createNewCustomer(
 
 export async function generateNewInvoice(
   data: Omit<Invoice, 'id' | 'invoiceNumber' | 'customer' | 'voucherType' | 'totalAmount' | 'subTotal' | 'amountInWords'> & { items: Omit<InvoiceItem, 'id' | 'amount'>[] },
-  customer: Customer
+  customer: Customer,
+  companyId: string
 ): Promise<Invoice> {
   await simulateDelay(1500);
+  console.log(`Mock API: Generating invoice for "${customer.name}" in company "${companyId}". Real endpoint would be ${TALLY_API_BASE_URL}`);
   
   let subTotal = 0;
   const processedItems: InvoiceItem[] = data.items.map((item, index) => {
@@ -76,14 +111,11 @@ export async function generateNewInvoice(
     };
   });
 
-  // Basic GST calculation (example: 9% CGST, 9% SGST if customer is in same state, else 18% IGST)
-  // This is a simplified example. Real GST depends on item HSN, customer state, supplier state etc.
-  // Assuming supplier is in 'MH' (Maharashtra) for this mock.
   const supplierState = 'MH'; 
   let cgstAmount = 0;
   let sgstAmount = 0;
   let igstAmount = 0;
-  const gstRate = 0.18; // Assuming a flat 18% GST for simplicity
+  const gstRate = 0.18; 
 
   if (customer.state === supplierState) {
     cgstAmount = subTotal * (gstRate / 2);
@@ -110,6 +142,7 @@ export async function generateNewInvoice(
     totalAmount,
     amountInWords: numberToWords(totalAmount),
     voucherType: 'Sales',
+    companyId: companyId,
   };
   MOCK_INVOICES_DB.push(newInvoice);
   return newInvoice;

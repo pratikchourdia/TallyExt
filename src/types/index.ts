@@ -1,3 +1,10 @@
+export interface Company {
+  id: string;
+  name: string;
+  // Add other relevant company details if needed from Tally
+  // e.g., financial year, address, etc.
+}
+
 export interface Customer {
   id: string;
   name: string;
@@ -13,6 +20,7 @@ export interface Customer {
   ledgerName: string; 
   group: 'Sundry Debtors';
   creditAccount: string; 
+  companyId?: string; // To associate customer with a Tally company
 }
 
 export interface InvoiceItem {
@@ -42,6 +50,7 @@ export interface Invoice {
   totalAmount: number;
   amountInWords: string;
   voucherType: 'Sales';
+  companyId?: string; // To associate invoice with a Tally company
 }
 
 export const MOCK_CREDIT_ACCOUNTS = [
@@ -99,6 +108,13 @@ export const MOCK_UNITS = [
   { value: 'BOX', label: 'Box (BOX)' },
   { value: 'SET', label: 'Sets (SET)' },
 ];
+
+export const MOCK_COMPANIES: Company[] = [
+  { id: 'comp_001', name: 'My Main Company (FY 2023-24)' },
+  { id: 'comp_002', name: 'Branch Office Alpha (FY 2023-24)' },
+  { id: 'comp_003', name: 'Test Company Inc.' },
+];
+
 
 // Basic number to words converter (Simplified for brevity)
 export function numberToWords(num: number): string {

@@ -43,7 +43,11 @@ Please check the following:
 1. Ensure Tally application is running on your computer.
 2. Ensure the correct company is loaded within Tally.
 3. Verify Tally is configured to allow API access (e.g., on port 9000 via Tally.ini settings or enabling HTTP/ODBC services in Tally).
-4. Potential CORS issue: If your browser console shows CORS errors, Tally might need to be configured to allow requests from this web application's origin, or a proxy might be needed for development.
+4. Potential CORS issue or Private Network Access (PNA) block:
+   - If your browser console shows 'Blocked by Private Network Access checks' or similar CORS errors, your browser is preventing requests to 'localhost' or private IP addresses from this web application.
+   - For development, you might temporarily disable this check in your browser (e.g., for Chrome, navigate to 'chrome://flags/#block-insecure-private-network-requests' and disable it). This is NOT a production solution.
+   - For a long-term solution, Tally (or a proxy server you control) needs to handle CORS preflight requests and send appropriate 'Access-Control-Allow-Origin' and 'Access-Control-Allow-Private-Network: true' headers.
+   - Consider using a backend proxy (e.g., a Next.js API route that forwards the request) to make requests to Tally if direct browser access is restricted by PNA.
 Original error: ${error.message}`
         );
     }
@@ -54,8 +58,6 @@ Original error: ${error.message}`
 // --- Tally API Functions ---
 
 export async function getTallyCompanies(): Promise<Company[]> {
-  // IMPORTANT: This XML is a common way to request a list of loaded companies.
-  // You may need to adjust it based on your Tally version.
   const requestXml = `
     <ENVELOPE>
       <HEADER>
@@ -76,37 +78,27 @@ export async function getTallyCompanies(): Promise<Company[]> {
   try {
     const xmlDoc = await sendTallyRequest(requestXml);
     const companies: Company[] = [];
-    // Tally usually returns company names in <COMPANYNAME> or similar tags.
-    // The exact structure can vary. This is a common pattern.
-    // It might be nested under <COMPANYONDISK> or directly.
-    const companyNameElements = xmlDoc.querySelectorAll('COMPANYNAME, NAME'); // Try common tags
+    const companyNameElements = xmlDoc.querySelectorAll('COMPANYNAME, NAME'); 
     
     if (companyNameElements.length === 0 && xmlDoc.querySelector('COMPANY')) {
-        // Fallback for structures like <COMPANY><NAME>...</NAME></COMPANY>
         xmlDoc.querySelectorAll('COMPANY').forEach(companyNode => {
             const nameNode = companyNode.querySelector('NAME');
-            const idNode = companyNode.querySelector('ID'); // Or a path, depends on Tally version
+            const idNode = companyNode.querySelector('ID'); 
             if (nameNode) {
                  companies.push({
-                    // ID might be complex (path, internal ID). For selection, name is often sufficient.
-                    // Using name as ID for simplicity here if no clear ID is available.
                     id: idNode?.textContent?.trim() || nameNode.textContent!.trim(), 
                     name: nameNode.textContent!.trim(),
                 });
             }
         });
     } else {
-        companyNameElements.forEach((node, index) => {
+        companyNameElements.forEach((node) => {
             const name = node.textContent?.trim();
             if (name) {
-            // Tally doesn't always provide a simple "ID" for companies in this list.
-            // Using the name as the ID for selection purposes.
-            // Or, if Tally provides a specific ID or path, use that.
             companies.push({ id: name, name });
             }
         });
     }
-
 
     if (companies.length === 0 && xmlDoc.documentElement.outerHTML.includes('<NOCONNECTION')) {
        throw new Error("Tally is not connected or no company is loaded. Please ensure Tally is running with a company open.");
@@ -116,13 +108,11 @@ export async function getTallyCompanies(): Promise<Company[]> {
     return companies;
   } catch (error) {
     console.error('Error fetching Tally companies:', error);
-    throw error; // Re-throw for UI to handle
+    throw error; 
   }
 }
 
 export async function findCustomerByName(name: string, companyName: string): Promise<Customer | null> {
-  // IMPORTANT: Adjust XML and parsing based on your Tally version.
-  // This fetches a Ledger.
   const requestXml = `
     <ENVELOPE>
       <HEADER>
@@ -156,16 +146,15 @@ export async function findCustomerByName(name: string, companyName: string): Pro
     
     const addressLines = (getText('ADDRESS', ledgerNode) || '').split('\n').map(line => line.trim()).filter(line => line);
 
-
     const customer: Customer = {
       id: getText('NAME'), 
       name: getText('NAME'),
       ledgerName: getText('NAME'),
-      group: getText('PARENT') === 'Sundry Debtors' ? 'Sundry Debtors' : 'Sundry Debtors', // Default or check parent
+      group: getText('PARENT') === 'Sundry Debtors' ? 'Sundry Debtors' : 'Sundry Debtors',
       addressLine1: addressLines[0] || '',
       addressLine2: addressLines[1] || '',
-      city: addressLines[2] || '', // Assuming city is 3rd line, adjust if needed
-      state: getText('STATENAME') || addressLines[3] || '', // Prefer STATENAME, fallback to address line
+      city: addressLines[2] || '', 
+      state: getText('STATENAME') || addressLines[3] || '', 
       pincode: getText('PINCODE'),
       email: getText('EMAIL'),
       phoneNumber: getText('LEDGERPHONE') || getText('LEDGERMOBILE'),
@@ -185,8 +174,6 @@ export async function createNewCustomer(
   data: Omit<Customer, 'id' | 'ledgerName' | 'group'> & { name: string },
   companyName: string
 ): Promise<Customer> {
-  // IMPORTANT: This XML is for creating a Ledger. Adjust tags as per your Tally.
-  // Ensure the PARENT group 'Sundry Debtors' exists in your Tally.
   const requestXml = `
     <ENVELOPE>
       <HEADER>
@@ -209,8 +196,8 @@ export async function createNewCustomer(
                   ${data.city ? `<ADDRESS>${data.city}</ADDRESS>` : ''}
                 </ADDRESS.LIST>
                 <MAILINGNAME>${data.name}</MAILINGNAME>
-                <PARENT>Sundry Debtors</PARENT> {/* Ensure this group exists */}
-                <COUNTRYNAME>India</COUNTRYNAME> {/* Or make dynamic */}
+                <PARENT>Sundry Debtors</PARENT>
+                <COUNTRYNAME>India</COUNTRYNAME>
                 <PINCODE>${data.pincode || ''}</PINCODE>
                 <STATENAME>${data.state || ''}</STATENAME>
                 <LEDGERPHONE>${data.phoneNumber || ''}</LEDGERPHONE>
@@ -263,17 +250,9 @@ export async function generateNewInvoice(
     subTotal += amount;
     return { ...item, id: `item_${Date.now()}_${index}`, amount };
   });
-
-  // This GST calculation is a placeholder. Tally will typically calculate taxes based on its own rules
-  // when items and ledgers are properly configured with tax classifications.
-  // For robust integration, ensure your Stock Items, Sales Ledgers, and GST Ledgers are correctly set up in Tally.
-  let cgstAmount = 0, sgstAmount = 0, igstAmount = 0;
-  let cgstRatePercent = 0, sgstRatePercent = 0, igstRatePercent = 0;
-  const totalAmount = subTotal; // Tally will add taxes
   
   const today = new Date(data.invoiceDate);
   const formattedDate = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
-
 
   const voucherNumber = `API-${Date.now()}`; 
 
@@ -295,44 +274,7 @@ export async function generateNewInvoice(
       </ALLINVENTORYENTRIES.LIST>`;
   });
   
-  // Remove manual tax ledger entries XML. Tally should calculate this.
-  // Ensure Sales Ledger (salesLedgerName), CGST, SGST, IGST ledgers are correctly configured in Tally
-  // with appropriate tax rates for automatic calculation.
-  
-  // Example of how you might include common tax ledgers if NOT relying on auto-calculation (less ideal):
-  // This section is highly dependent on Tally setup and whether you want manual tax posting or automatic.
-  // For automatic, ensure item masters and sales/purchase ledgers are configured for GST.
-  /*
-  let taxLedgerEntriesXml = '';
-  if (customer.state.toLowerCase() === "maharashtra") { // Example: Intra-state
-      taxLedgerEntriesXml += `
-      <ALLLEDGERENTRIES.LIST>
-        <LEDGERNAME>CGST</LEDGERNAME> 
-        <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
-        <AMOUNT>${(subTotal * 0.09).toFixed(2)}</AMOUNT> 
-      </ALLLEDGERENTRIES.LIST>
-      <ALLLEDGERENTRIES.LIST>
-        <LEDGERNAME>SGST</LEDGERNAME>
-        <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
-        <AMOUNT>${(subTotal * 0.09).toFixed(2)}</AMOUNT>
-      </ALLLEDGERENTRIES.LIST>`;
-      cgstAmount = subTotal * 0.09; sgstAmount = subTotal * 0.09;
-      cgstRatePercent = 9; sgstRatePercent = 9;
-  } else { // Example: Inter-state
-       taxLedgerEntriesXml += `
-      <ALLLEDGERENTRIES.LIST>
-        <LEDGERNAME>IGST</LEDGERNAME>
-        <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
-        <AMOUNT>${(subTotal * 0.18).toFixed(2)}</AMOUNT>
-      </ALLLEDGERENTRIES.LIST>`;
-      igstAmount = subTotal * 0.18;
-      igstRatePercent = 18;
-  }
-  const finalTotalAmount = subTotal + cgstAmount + sgstAmount + igstAmount;
-  */
-  // For relying on Tally's auto-calculation (preferred):
-  const finalTotalAmount = subTotal; // Tally will add taxes if configured. The response will have final amount.
-
+  const finalTotalAmount = subTotal; 
 
   const requestXml = `
     <ENVELOPE>
@@ -365,12 +307,9 @@ export async function generateNewInvoice(
                 <ALLLEDGERENTRIES.LIST>
                   <LEDGERNAME>${customer.name}</LEDGERNAME>
                   <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>
-                  <AMOUNT>-${finalTotalAmount.toFixed(2)}</AMOUNT> {/* Party ledger is Dr. Amount will be updated by Tally with taxes */}
+                  <AMOUNT>-${finalTotalAmount.toFixed(2)}</AMOUNT> 
                 </ALLLEDGERENTRIES.LIST>
                 ${inventoryEntriesXml}
-                {/* Tax ledgers (CGST, SGST, IGST) should be automatically applied by Tally if item/ledger masters are configured correctly.
-                    If you need to explicitly add them, include their ALLLEDGERENTRIES.LIST here. 
-                    However, it's best practice to let Tally calculate taxes. */}
                 <ISINVOICE>Yes</ISINVOICE>
               </VOUCHER>
             </TALLYMESSAGE>
@@ -390,19 +329,14 @@ export async function generateNewInvoice(
     }
     
     const actualInvoiceNumber = newVchNoNode?.textContent?.trim() || voucherNumber;
-
-    // Fetch the created voucher to get actual tax amounts and total if needed
-    // This is an extra step but ensures data accuracy. For simplicity, we'll use calculated subtotal for now.
-    // In a real scenario, you might want to query the voucher details back from Tally.
     const invoiceFromTally = await fetchInvoiceDetails(actualInvoiceNumber, companyName);
-
 
     const newInvoice: Invoice = {
       ...data,
       id: `tally_inv_${actualInvoiceNumber}_${Date.now()}`, 
       invoiceNumber: actualInvoiceNumber,
       customer,
-      items: processedItems, // These are without tax breakdown per item from Tally
+      items: processedItems, 
       subTotal: invoiceFromTally?.subTotal || subTotal,
       cgstRate: invoiceFromTally?.cgstRate,
       cgstAmount: invoiceFromTally?.cgstAmount,
@@ -410,7 +344,7 @@ export async function generateNewInvoice(
       sgstAmount: invoiceFromTally?.sgstAmount,
       igstRate: invoiceFromTally?.igstRate,
       igstAmount: invoiceFromTally?.igstAmount,
-      totalAmount: invoiceFromTally?.totalAmount || finalTotalAmount, // Use finalTotalAmount from Tally if fetched
+      totalAmount: invoiceFromTally?.totalAmount || finalTotalAmount, 
       amountInWords: numberToWords(invoiceFromTally?.totalAmount || finalTotalAmount),
       voucherType: 'Sales',
       companyId: companyName,
@@ -422,8 +356,6 @@ export async function generateNewInvoice(
   }
 }
 
-
-// Helper function to fetch invoice details (e.g., after creation)
 async function fetchInvoiceDetails(voucherNumber: string, companyName: string): Promise<Partial<Invoice> | null> {
   const requestXml = `
   <ENVELOPE>
@@ -459,12 +391,16 @@ async function fetchInvoiceDetails(voucherNumber: string, companyName: string): 
     let sgstRate: number | undefined = undefined;
     let igstRate: number | undefined = undefined;
 
-    const partyLedgerAmountText = voucherNode.querySelector('PARTYLEDGERNAME ~ AMOUNT, ALLLEDGERENTRIES\\.LIST LEDGERNAME:contains("' + voucherNode.querySelector('PARTYLEDGERNAME')?.textContent + '") ~ AMOUNT')?.textContent;
-    if (partyLedgerAmountText) {
-        totalAmount = Math.abs(parseFloat(partyLedgerAmountText));
-    }
+    const partyLedgerName = voucherNode.querySelector('PARTYLEDGERNAME')?.textContent;
+    voucherNode.querySelectorAll('ALLLEDGERENTRIES\\.LIST').forEach(entry => {
+        if (entry.querySelector('LEDGERNAME')?.textContent === partyLedgerName) {
+            const amountText = entry.querySelector('AMOUNT')?.textContent;
+            if (amountText) {
+                totalAmount = Math.abs(parseFloat(amountText));
+            }
+        }
+    });
     
-    // Calculate subTotal from inventory entries (sum of item amounts before tax)
     voucherNode.querySelectorAll('ALLINVENTORYENTRIES\\.LIST').forEach(itemNode => {
         const amountText = itemNode.querySelector('AMOUNT')?.textContent;
         if (amountText) {
@@ -472,8 +408,6 @@ async function fetchInvoiceDetails(voucherNumber: string, companyName: string): 
         }
     });
 
-
-    // Extract tax details
     voucherNode.querySelectorAll('LEDGERENTRIES\\.LIST').forEach(ledgerEntry => {
         const ledgerName = ledgerEntry.querySelector('LEDGERNAME')?.textContent?.toUpperCase();
         const amountText = ledgerEntry.querySelector('AMOUNT')?.textContent;
@@ -481,42 +415,25 @@ async function fetchInvoiceDetails(voucherNumber: string, companyName: string): 
 
         if (ledgerName?.includes('CGST')) {
             cgstAmount = (cgstAmount || 0) + amount;
-            // Attempt to get rate if available (might need UDFs or specific tax ledger setup in Tally)
-            const rateText = ledgerEntry.querySelector('RATEOFGST')?.textContent; // Hypothetical tag
-            if (rateText) cgstRate = parseFloat(rateText);
+            const rateText = ledgerEntry.querySelector('GSTCOMMONTAXDETAILS\\.LIST > GSTRATEDETAILS\\.LIST > GSTRATEVAL')?.textContent;
+            if (rateText) cgstRate = parseFloat(rateText); else if (subTotal > 0 && amount > 0) cgstRate = parseFloat(((amount / subTotal) * 100).toFixed(2));
         } else if (ledgerName?.includes('SGST') || ledgerName?.includes('UTGST')) {
             sgstAmount = (sgstAmount || 0) + amount;
-            const rateText = ledgerEntry.querySelector('RATEOFGST')?.textContent;
-            if (rateText) sgstRate = parseFloat(rateText);
+            const rateText = ledgerEntry.querySelector('GSTCOMMONTAXDETAILS\\.LIST > GSTRATEDETAILS\\.LIST > GSTRATEVAL')?.textContent;
+            if (rateText) sgstRate = parseFloat(rateText); else if (subTotal > 0 && amount > 0) sgstRate = parseFloat(((amount / subTotal) * 100).toFixed(2));
         } else if (ledgerName?.includes('IGST')) {
             igstAmount = (igstAmount || 0) + amount;
-            const rateText = ledgerEntry.querySelector('RATEOFGST')?.textContent;
-            if (rateText) igstRate = parseFloat(rateText);
+            const rateText = ledgerEntry.querySelector('GSTCOMMONTAXDETAILS\\.LIST > GSTRATEDETAILS\\.LIST > GSTRATEVAL')?.textContent;
+            if (rateText) igstRate = parseFloat(rateText); else if (subTotal > 0 && amount > 0) igstRate = parseFloat(((amount / subTotal) * 100).toFixed(2));
         }
     });
     
-    // If totalAmount wasn't directly on party ledger, sum from all ledgers or use computed value
-    if (totalAmount === 0) { // Fallback if party ledger amount wasn't negative or parsed
-        let calculatedTotal = 0;
-         voucherNode.querySelectorAll('ALLLEDGERENTRIES\\.LIST AMOUNT, LEDGERENTRIES\\.LIST AMOUNT').forEach(amountNode => {
-            const amountVal = parseFloat(amountNode.textContent || '0');
-            // Heuristic: sum amounts that are not the main sales ledger amounts (which are negative)
-            // This part is tricky without knowing the exact XML structure of debits/credits
-            // A safer bet is to rely on Tally providing a grand total.
-            // For now, we'll use what we have.
-            if(amountVal > 0 && !voucherNode.querySelector('PARTYLEDGERNAME')?.textContent?.includes(amountNode.previousElementSibling?.textContent || '###')) {
-                 calculatedTotal += amountVal;
-            } else if (amountVal < 0 && voucherNode.querySelector('PARTYLEDGERNAME')?.textContent?.includes(amountNode.previousElementSibling?.textContent || '###')) {
-                 calculatedTotal -= amountVal; // add the absolute value of party ledger
-            }
-        });
-         totalAmount = calculatedTotal;
+    if (totalAmount === 0 && subTotal > 0) { 
+        totalAmount = subTotal + (cgstAmount || 0) + (sgstAmount || 0) + (igstAmount || 0);
     }
-     // If subTotal wasn't calculated from items (e.g., service invoice), it might be total - taxes
     if (subTotal === 0 && totalAmount > 0) {
         subTotal = totalAmount - (cgstAmount || 0) - (sgstAmount || 0) - (igstAmount || 0);
     }
-
 
     return {
         subTotal,
@@ -534,6 +451,3 @@ async function fetchInvoiceDetails(voucherNumber: string, companyName: string): 
     return null;
   }
 }
-
-
-    

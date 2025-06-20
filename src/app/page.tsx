@@ -34,11 +34,11 @@ export default function HomePage() {
     if (showLoadingIndicator) {
       setIsLoadingCompanies(true);
     }
-    setCompanyLoadError(null);
+    setCompanyLoadError(null); // Reset error before fetch attempt
     try {
       const fetchedCompanies = await getTallyCompanies();
       setCompanies(fetchedCompanies);
-      if (fetchedCompanies.length === 0 && !companyLoadError) { // Only set error if not already set by a connection failure
+      if (fetchedCompanies.length === 0) { 
         setCompanyLoadError("No companies found. Ensure Tally is running with a company loaded, or check Tally API configuration and XML response structure in tally-api.ts.");
       }
     } catch (error) {
@@ -58,7 +58,7 @@ export default function HomePage() {
         setIsLoadingCompanies(false);
       }
     }
-  }, [toast, companyLoadError]);
+  }, [toast]); // Removed companyLoadError from dependencies to prevent loop
 
   useEffect(() => {
     fetchCompaniesCallback();
@@ -179,15 +179,16 @@ export default function HomePage() {
                   </Select>
                 </>
               ) : (
+                // This case should ideally be covered by companyLoadError when no companies are found by fetchCompaniesCallback
+                // Keeping a fallback or adjusting fetchCompaniesCallback to always set an error if list is empty after successful fetch.
                 <div className="text-center text-muted-foreground space-y-3 p-3 border rounded-md">
                   <p>
-                    No Tally companies found or returned.
+                    No Tally companies available or Tally not reachable.
                   </p>
                   <ul className="text-xs list-disc list-inside text-left">
                     <li>Ensure Tally is running and a company is loaded.</li>
                     <li>Verify Tally's API/ODBC port is open (e.g., 9000) and accessible.</li>
                     <li>Check Tally.ini or Tally's configuration for remote access settings.</li>
-                    <li>The XML structure for fetching companies in `tally-api.ts` might need adjustment for your Tally version.</li>
                   </ul>
                    <Button onClick={handleRetryConnection} variant="outline" size="sm">
                      <RotateCw className="mr-2 h-4 w-4" /> Refresh Company List
@@ -288,3 +289,4 @@ export default function HomePage() {
     </div>
   );
 }
+

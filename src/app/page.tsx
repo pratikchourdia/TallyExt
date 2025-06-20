@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { AppHeader } from '@/components/feature/AppHeader';
 import { CustomerSearch } from '@/components/feature/CustomerSearch';
 import { CustomerForm } from '@/components/feature/CustomerForm';
@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Zap, Building, Loader2, AlertTriangle } from 'lucide-react';
+import { Zap, Building, Loader2, AlertTriangle, RotateCw } from 'lucide-react';
 import { getTallyCompanies } from '@/lib/tally-api';
 import { useToast } from '@/hooks/use-toast';
 
@@ -30,42 +30,42 @@ export default function HomePage() {
   const [companyLoadError, setCompanyLoadError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  useEffect(() => {
-    async function fetchCompanies() {
+  const fetchCompaniesCallback = useCallback(async (showLoadingIndicator = true) => {
+    if (showLoadingIndicator) {
       setIsLoadingCompanies(true);
-      setCompanyLoadError(null);
-      try {
-        const fetchedCompanies = await getTallyCompanies();
-        setCompanies(fetchedCompanies);
-        if (fetchedCompanies.length === 0) {
-          setCompanyLoadError("No companies found. Ensure Tally is running with a company loaded, or check Tally API configuration.");
-        }
-        // Auto-select if only one company - might be too aggressive with real API, so commented out.
-        // if (fetchedCompanies.length === 1) {
-        //   setSelectedCompany(fetchedCompanies[0]);
-        //   setCurrentStep('SEARCH_CUSTOMER'); 
-        // }
-      } catch (error) {
-        console.error("Error fetching companies:", error);
-        let errorMessage = "Could not fetch Tally companies.";
-        if (error instanceof Error) {
-            errorMessage = error.message; // Use specific error from API if available
-        }
-        setCompanyLoadError(errorMessage);
-        toast({
-          title: "Error Fetching Companies",
-          description: errorMessage,
-          variant: "destructive",
-        });
-      } finally {
+    }
+    setCompanyLoadError(null);
+    try {
+      const fetchedCompanies = await getTallyCompanies();
+      setCompanies(fetchedCompanies);
+      if (fetchedCompanies.length === 0 && !companyLoadError) { // Only set error if not already set by a connection failure
+        setCompanyLoadError("No companies found. Ensure Tally is running with a company loaded, or check Tally API configuration and XML response structure in tally-api.ts.");
+      }
+    } catch (error) {
+      console.error("Error fetching companies:", error);
+      let errorMessage = "Could not fetch Tally companies.";
+      if (error instanceof Error) {
+          errorMessage = error.message; 
+      }
+      setCompanyLoadError(errorMessage);
+      toast({
+        title: "Error Fetching Companies",
+        description: "Failed to connect or retrieve companies from Tally. See details below.",
+        variant: "destructive",
+      });
+    } finally {
+      if (showLoadingIndicator) {
         setIsLoadingCompanies(false);
       }
     }
-    fetchCompanies();
-  }, [toast]);
+  }, [toast, companyLoadError]);
 
-  const handleCompanySelected = (companyId: string) => { // companyId is now Tally company name/identifier
-    const company = companies.find(c => c.id === companyId); // Use ID which might be name
+  useEffect(() => {
+    fetchCompaniesCallback();
+  }, [fetchCompaniesCallback]);
+
+  const handleCompanySelected = (companyId: string) => { 
+    const company = companies.find(c => c.id === companyId); 
     if (company) {
       setSelectedCompany(company);
       setSelectedCustomer(null);
@@ -105,42 +105,24 @@ export default function HomePage() {
 
   const handleCancelInvoiceCreation = () => {
     setCurrentStep('SEARCH_CUSTOMER'); 
-    // Keep selected customer if user cancels invoice creation for that customer
-    // setSelectedCustomer(null); 
   };
   
   const handleCreateNewInvoiceForSameCustomer = () => {
-    setCreatedInvoice(null); // Clear previous invoice
-    setCurrentStep('CREATE_INVOICE'); // Go to create invoice for the same customer
+    setCreatedInvoice(null); 
+    setCurrentStep('CREATE_INVOICE'); 
+  };
+
+  const handleRetryConnection = () => {
+    fetchCompaniesCallback(true); // Retry with loading indicator
   };
 
   const handleStartOver = () => {
     setSelectedCustomer(null);
     setCreatedInvoice(null);
     setSelectedCompany(null);
-    setCurrentStep('SELECT_COMPANY'); // Go back to company selection
-     // Re-fetch companies in case list changed or to retry connection
-    async function fetchCompanies() {
-      setIsLoadingCompanies(true);
-      setCompanyLoadError(null);
-      try {
-        const fetchedCompanies = await getTallyCompanies();
-        setCompanies(fetchedCompanies);
-         if (fetchedCompanies.length === 0) {
-          setCompanyLoadError("No companies found. Ensure Tally is running with a company loaded, or check Tally API configuration.");
-        }
-      } catch (error) {
-         console.error("Error fetching companies:", error);
-        let errorMessage = "Could not fetch Tally companies.";
-        if (error instanceof Error) {
-            errorMessage = error.message; 
-        }
-        setCompanyLoadError(errorMessage);
-      } finally {
-        setIsLoadingCompanies(false);
-      }
-    }
-    fetchCompanies();
+    setCompanyLoadError(null);
+    setCurrentStep('SELECT_COMPANY'); 
+    fetchCompaniesCallback(); // Re-fetch companies
   };
 
 
@@ -149,6 +131,8 @@ export default function HomePage() {
     setSelectedCompany(null);
     setSelectedCustomer(null);
     setCreatedInvoice(null);
+    setCompanyLoadError(null);
+    fetchCompaniesCallback(); // Re-fetch companies as list might've changed or to retry connection
   };
 
   const renderStepContent = () => {
@@ -168,14 +152,14 @@ export default function HomePage() {
                   <p className="text-muted-foreground">Loading companies from Tally...</p>
                 </div>
               ) : companyLoadError ? (
-                 <div className="text-center text-destructive space-y-2">
+                 <div className="text-center text-destructive space-y-3 p-3 border border-destructive/50 rounded-md bg-destructive/10">
                     <div className="flex items-center justify-center text-destructive">
                         <AlertTriangle className="mr-2 h-5 w-5" />
                         <p className="font-semibold">Connection Error</p>
                     </div>
-                    <p className="text-sm">{companyLoadError}</p>
-                    <Button onClick={handleStartOver} variant="outline" size="sm">
-                        Retry Connection
+                    <p className="text-sm whitespace-pre-wrap">{companyLoadError}</p>
+                    <Button onClick={handleRetryConnection} variant="destructive" size="sm">
+                        <RotateCw className="mr-2 h-4 w-4" /> Retry Connection
                     </Button>
                 </div>
               ) : companies.length > 0 ? (
@@ -195,10 +179,20 @@ export default function HomePage() {
                   </Select>
                 </>
               ) : (
-                <p className="text-center text-muted-foreground">
-                  No Tally companies found. Please ensure Tally is running, a company is loaded, and it's accessible via API.
-                  You might need to check Tally's configuration for port 9000 access.
-                </p>
+                <div className="text-center text-muted-foreground space-y-3 p-3 border rounded-md">
+                  <p>
+                    No Tally companies found or returned.
+                  </p>
+                  <ul className="text-xs list-disc list-inside text-left">
+                    <li>Ensure Tally is running and a company is loaded.</li>
+                    <li>Verify Tally's API/ODBC port is open (e.g., 9000) and accessible.</li>
+                    <li>Check Tally.ini or Tally's configuration for remote access settings.</li>
+                    <li>The XML structure for fetching companies in `tally-api.ts` might need adjustment for your Tally version.</li>
+                  </ul>
+                   <Button onClick={handleRetryConnection} variant="outline" size="sm">
+                     <RotateCw className="mr-2 h-4 w-4" /> Refresh Company List
+                    </Button>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -234,7 +228,7 @@ export default function HomePage() {
         );
       case 'CREATE_INVOICE':
         if (!selectedCustomer || !selectedCompany) {
-          setCurrentStep('SEARCH_CUSTOMER'); // Or SELECT_COMPANY if company is also missing
+          setCurrentStep('SEARCH_CUSTOMER'); 
           return <p>Error: No customer or company selected. Redirecting...</p>;
         }
         return (
@@ -246,14 +240,14 @@ export default function HomePage() {
           />
         );
       case 'VIEW_INVOICE':
-        if (!createdInvoice || !selectedCompany) { // Ensure company is also selected
+        if (!createdInvoice || !selectedCompany) { 
           setCurrentStep('SEARCH_CUSTOMER');
           return <p>Error: No invoice or company context. Redirecting...</p>;
         }
         return (
           <InvoiceDisplay 
             invoice={createdInvoice} 
-            customer={selectedCustomer!} // Customer must be present if invoice is present
+            customer={selectedCustomer!} 
             company={selectedCompany}
             onCreateNewForSameCustomer={handleCreateNewInvoiceForSameCustomer}
             onStartOver={handleStartOver}
@@ -268,12 +262,12 @@ export default function HomePage() {
     <div className="flex flex-col min-h-screen bg-background">
       <AppHeader />
       <main className="flex-grow container mx-auto px-4 py-8 md:px-8 md:py-12">
-        {currentStep === 'SELECT_COMPANY' && !selectedCompany && (
+        {currentStep === 'SELECT_COMPANY' && !selectedCompany && !companyLoadError && (
            <Card className="mb-8 bg-gradient-to-r from-primary/10 to-accent/10 border-primary/30 shadow-md">
             <CardContent className="p-6 flex items-center space-x-4">
               <Zap size={48} className="text-primary" />
               <div>
-                <h2 className="text-xl font-semibold text-primary font-headline">Welcome to Auto Invoicer!</h2>
+                <h2 className="text-xl font-semibold text-primary font-headline">Welcome to TallyPrime Auto Invoicer!</h2>
                 <p className="text-muted-foreground">
                   Connect to Tally: Select your Tally Company to begin creating invoices.
                 </p>
@@ -289,9 +283,8 @@ export default function HomePage() {
         {renderStepContent()}
       </main>
       <footer className="py-4 text-center text-sm text-muted-foreground border-t">
-        © {new Date().getFullYear()} TallyPrime Auto Invoicer. Ensure Tally is running on port 9000.
+        © {new Date().getFullYear()} TallyPrime Auto Invoicer. Ensure Tally is running and accessible on port 9000.
       </footer>
     </div>
   );
 }
-

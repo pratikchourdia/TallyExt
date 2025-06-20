@@ -43,7 +43,7 @@ Please check the following:
 1. Ensure Tally application is running on your computer.
 2. Ensure the correct company is loaded within Tally.
 3. Verify Tally is configured to allow API access (e.g., on port 9000 via Tally.ini settings or enabling HTTP/ODBC services in Tally).
-4. Potential CORS issue: Tally might need to be configured to allow requests from this web application's origin, or a proxy might be needed.
+4. Potential CORS issue: If your browser console shows CORS errors, Tally might need to be configured to allow requests from this web application's origin, or a proxy might be needed for development.
 Original error: ${error.message}`
         );
     }
@@ -534,3 +534,6 @@ async function fetchInvoiceDetails(voucherNumber: string, companyName: string): 
     return null;
   }
 }
+
+
+    

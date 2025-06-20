@@ -17,9 +17,7 @@ interface InvoiceDisplayProps {
 export function InvoiceDisplay({ invoice, onCreateNew }: InvoiceDisplayProps) {
   
   const handlePrint = () => {
-    // This is a mock print function. In a real app, you'd use window.print()
-    // or a library to format the print output.
-    alert("Printing Invoice... (Not implemented in this demo)");
+    window.print();
   };
 
   return (
